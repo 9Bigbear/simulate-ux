@@ -1,7 +1,7 @@
 ---
 name: simulate-ux
 description: >-
-  Simulate real-world human eyes and hands to perform deep, end-to-end, multi-persona UX/UI audits and chaos testing on web applications, prototypes, or competitor sites. Use whenever the user asks to "experience the page", "audit UX", "test user flow", "check if it crashes under rage clicks", or "simulate user experience". Enforces visual inspection, physical click/drag journeys via Playwright, and chaos monkey stress testing.
+  Simulate real-world human eyes and hands to perform deep, end-to-end, multi-persona UX/UI audits and chaos testing on web applications, prototypes, or competitor sites. Use whenever the user asks to "experience the page", "audit UX", "test user flow", "check if it crashes under rage clicks", "simulate user experience", or mentions "用体验+rea+视觉角度去逆向画布", "逆向画布体验", or "视觉与交互体验走查". Enforces visual inspection, physical click/drag journeys via Playwright, and chaos monkey stress testing.
 ---
 
 # 模拟用户体验（UX）深度走查与混沌测试规范 (Simulate UX Skill)
