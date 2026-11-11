@@ -1,0 +1,28 @@
+{
+  "name": "simulate-ux",
+  "version": "1.0.0",
+  "description": "Simulate real-world human eyes and hands to perform deep, multi-persona UX/UI audits and chaos testing on web applications.",
+  "main": "scripts/ux-engine.js",
+  "bin": {
+    "simulate-ux": "scripts/ux-engine.js"
+  },
+  "scripts": {
+    "audit": "node scripts/ux-engine.js",
+    "chaos": "node scripts/ux-engine.js --mode=chaos"
+  },
+  "keywords": [
+    "ux",
+    "ui",
+    "agent-skill",
+    "playwright",
+    "chaos-testing",
+    "monkey-testing",
+    "gremlins",
+    "accessibility"
+  ],
+  "author": "9Bigbear",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
