@@ -92,7 +92,8 @@ Options:
 const targetUrl = getArg('url', 'http://localhost:3000');
 const mode = getArg('mode', 'full'); // inspect | chaos | full
 const durationSec = parseInt(getArg('duration', '8'), 10);
-const isHeadless = getArg('headless', 'true') !== 'false';
+// Default to headed mode (headless: false) so user can visually see Chrome opening and interacting
+const isHeadless = getArg('headless', 'false') === 'true';
 const outputDir = path.resolve(getArg('outputDir', path.join(process.cwd(), '.ux-reports', `run-${Date.now()}`)));
 const [vpWidth, vpHeight] = (getArg('viewport', '1440x900')).split('x').map(n => parseInt(n, 10));
 const stealthEnabled = getArg('stealth', 'true') !== 'false';
