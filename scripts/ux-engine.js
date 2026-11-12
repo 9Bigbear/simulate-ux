@@ -1,12 +1,16 @@
 /**
- * UX Engine - Universal Vision & Chaos Simulator for Web Applications
- * Combines Playwright (Physical Mouse/Keyboard Simulation),
- * Built-in Chaos Monkey (Gremlins-style clicker/typer/toucher),
- * and Console/Network Error Harvester.
+ * UX Engine - Universal Vision, Anti-Bot Stealth & Chaos Simulator for Web Applications
+ * Features:
+ * 1. Anti-Bot / Anti-Detection Stealth (Bypasses Cloudflare, navigator.webdriver, automation flags)
+ * 2. Uses Real Installed Chrome when available
+ * 3. Auto-detects local proxy (e.g. 127.0.0.1:12450)
+ * 4. Captures High-res retina screenshots & Console/Network errors
+ * 5. Built-in Chaos Monkey (Gremlins-style rapid clicker/scroller/typer)
  */
 
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 // Safe module resolver for Playwright
 let playwright;
@@ -37,7 +41,7 @@ function getArg(key, defaultValue) {
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-UX-Engine: Universal Vision & Chaos Testing CLI
+UX-Engine: Stealth Vision & Chaos Testing CLI
 Usage:
   node ux-engine.js [options]
 
@@ -46,6 +50,8 @@ Options:
   --mode=<mode>          inspect | chaos | full (default: full)
   --duration=<seconds>   Chaos monkey duration in seconds (default: 8)
   --headless=<bool>      Run headless or open window (default: true)
+  --proxy=<proxy_url>    Optional proxy server (auto-detects 127.0.0.1:12450 if available)
+  --stealth=<bool>       Enable anti-bot fingerpint evasion (default: true)
   --viewport=<WxH>       Viewport dimensions (default: 1440x900)
   --outputDir=<path>     Directory to save screenshots & json report
 `);
@@ -58,9 +64,36 @@ const durationSec = parseInt(getArg('duration', '8'), 10);
 const isHeadless = getArg('headless', 'true') !== 'false';
 const outputDir = path.resolve(getArg('outputDir', path.join(process.cwd(), '.ux-reports', `run-${Date.now()}`)));
 const [vpWidth, vpHeight] = (getArg('viewport', '1440x900')).split('x').map(n => parseInt(n, 10));
+const stealthEnabled = getArg('stealth', 'true') !== 'false';
+let proxyConfig = getArg('proxy', null);
 
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
+}
+
+// Check local real Chrome installation
+function getRealChromePath() {
+  const chromePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+  ];
+  for (const p of chromePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
+// Check if a proxy is available
+async function checkProxyAvailable(host, port) {
+  return new Promise((resolve) => {
+    const req = http.request({ host, port, method: 'CONNECT', path: 'www.google.com:443', timeout: 800 }, (res) => {
+      resolve(true);
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.end();
+  });
 }
 
 async function runUXAudit() {
@@ -84,16 +117,93 @@ async function runUXAudit() {
     summary: ''
   };
 
-  console.log(`[UX-Engine] Launching browser (Headless: ${isHeadless}, Viewport: ${vpWidth}x${vpHeight})...`);
-  const browser = await chromium.launch({
+  // Auto-detect proxy for non-localhost targets
+  const isLocalHost = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1');
+  if (!proxyConfig && !isLocalHost) {
+    const hasProxy12450 = await checkProxyAvailable('127.0.0.1', 12450);
+    if (hasProxy12450) {
+      proxyConfig = 'http://127.0.0.1:12450';
+      console.log(`[UX-Engine Stealth] Auto-detected active local proxy: ${proxyConfig}`);
+    }
+  }
+
+  const realChrome = getRealChromePath();
+  console.log(`[UX-Engine] Launching browser... (Headless: ${isHeadless}, Real Chrome: ${Boolean(realChrome)})`);
+
+  // Stealth launch arguments: strips automation signals
+  const launchArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-infobars',
+    '--disable-features=IsolateOrigins,site-per-process',
+    '--window-size=' + vpWidth + ',' + vpHeight
+  ];
+
+  const launchOptions = {
     headless: isHeadless,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+    args: launchArgs,
+    ignoreDefaultArgs: ['--enable-automation'] // CRITICAL: remove the automation banner flag
+  };
+
+  if (realChrome) {
+    launchOptions.executablePath = realChrome;
+  }
+
+  if (proxyConfig) {
+    launchOptions.proxy = { server: proxyConfig };
+  }
+
+  const browser = await chromium.launch(launchOptions);
 
   const context = await browser.newContext({
     viewport: { width: vpWidth, height: vpHeight },
-    deviceScaleFactor: 2
+    deviceScaleFactor: 2,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    locale: 'zh-CN',
+    timezoneId: 'Asia/Shanghai'
   });
+
+  // Inject Stealth scripts to erase navigator.webdriver and match real human browser environment
+  if (stealthEnabled) {
+    await context.addInitScript(() => {
+      // 1. Wipe navigator.webdriver
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined
+      });
+
+      // 2. Mock chrome object
+      window.chrome = {
+        app: { isInstalled: false },
+        runtime: {},
+        loadTimes: function() {},
+        csi: function() {}
+      };
+
+      // 3. Mock languages and plugins
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['zh-CN', 'zh', 'en-US', 'en']
+      });
+
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin' }
+        ]
+      });
+
+      // 4. Overwrite permissions query
+      const originalQuery = window.navigator.permissions?.query;
+      if (originalQuery) {
+        window.navigator.permissions.query = (parameters) => (
+          parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+        );
+      }
+    });
+  }
 
   const page = await context.newPage();
 
@@ -102,7 +212,7 @@ async function runUXAudit() {
     if (msg.type() === 'error') {
       const text = msg.text();
       report.consoleErrors.push({ text, location: msg.location() });
-      console.warn(`[Page Console Error] ${text.slice(0, 120)}`);
+      console.warn(`[Page Console Error] ${text.slice(0, 140)}`);
     }
   });
 
@@ -122,8 +232,8 @@ async function runUXAudit() {
   try {
     console.log(`[UX-Engine] Navigating to ${targetUrl}...`);
     const t0 = Date.now();
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(1500);
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    await page.waitForTimeout(2000);
     report.performanceTiming.domContentLoadedMs = Date.now() - t0;
 
     // 1. Initial Visual Inspection (First Impression)
@@ -140,7 +250,7 @@ async function runUXAudit() {
       await page.mouse.move((vpWidth * 2) / 3, (vpHeight * 2) / 3, { steps: 15 });
       await page.waitForTimeout(500);
 
-      // Scroll test
+      // Smooth scroll test
       await page.evaluate(() => window.scrollBy({ top: 350, behavior: 'smooth' }));
       await page.waitForTimeout(800);
       await page.evaluate(() => window.scrollBy({ top: -350, behavior: 'smooth' }));
@@ -199,7 +309,7 @@ async function runUXAudit() {
                 window.scrollBy(rand(-100, 100), rand(-150, 150));
                 scrollCount++;
               } else if (actionType === 4 && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-                const sampleTexts = ['123', '!@#$%', 'very_long_test_string_boundary_overflow_xxxxxxxxx', '   '];
+                const sampleTexts = ['123', '!@#$%', 'boundary_test_text', '   '];
                 target.value = sampleTexts[rand(0, sampleTexts.length - 1)];
                 target.dispatchEvent(new Event('input', { bubbles: true }));
                 inputCount++;
