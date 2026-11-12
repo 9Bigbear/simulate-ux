@@ -100,6 +100,7 @@ const isHeadless = getArg('headless', 'false') === 'true';
 const outputDir = path.resolve(getArg('outputDir', path.join(process.cwd(), '.ux-reports', `run-${Date.now()}`)));
 const defaultProfileDir = path.resolve('C:\\Users\\Administrator\\.gemini\\config\\skills\\simulate-ux\\.chrome-profile');
 const profileDir = path.resolve(getArg('profileDir', defaultProfileDir));
+const cdpPort = getArg('cdp', null); // Optional: e.g. 9222 to connect to already running real Chrome
 const [vpWidth, vpHeight] = (getArg('viewport', '1440x900')).split('x').map(n => parseInt(n, 10));
 const stealthEnabled = getArg('stealth', 'true') !== 'false';
 let proxyConfig = getArg('proxy', null);
@@ -142,41 +143,61 @@ async function runUXAudit() {
     }
   }
 
-  const realChrome = getRealChromePath();
-  console.log(`[UX-Engine] Launching Persistent Chrome Context...`);
-  console.log(`[UX-Engine] Profile Directory: ${profileDir}`);
-  console.log(`[UX-Engine] Visible Window: ${!isHeadless}, Real Chrome Binary: ${Boolean(realChrome)}`);
+  let browserOrContext;
+  let context;
+  let isCdpConnected = false;
 
-  // Stealth launch arguments: strips automation signals
-  const launchArgs = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-blink-features=AutomationControlled',
-    '--disable-infobars',
-    '--disable-features=IsolateOrigins,site-per-process',
-    `--window-size=${vpWidth},${vpHeight}`
-  ];
-
-  const contextOptions = {
-    headless: isHeadless,
-    args: launchArgs,
-    ignoreDefaultArgs: ['--enable-automation'],
-    viewport: { width: vpWidth, height: vpHeight },
-    deviceScaleFactor: 2,
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-    locale: 'zh-CN',
-    timezoneId: 'Asia/Shanghai'
-  };
-
-  if (realChrome) {
-    contextOptions.executablePath = realChrome;
-  }
-  if (proxyConfig) {
-    contextOptions.proxy = { server: proxyConfig };
+  // 1. If --cdp is provided or active, connect directly to user's running Chrome!
+  if (cdpPort) {
+    try {
+      console.log(`[UX-Engine] Attempting to attach to running Chrome on CDP port ${cdpPort}...`);
+      browserOrContext = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+      const contexts = browserOrContext.contexts();
+      context = contexts[0] || await browserOrContext.newContext();
+      isCdpConnected = true;
+      console.log(`[UX-Engine] 🎉 Successfully attached to your running Chrome! Using your existing login & cookies.`);
+    } catch (e) {
+      console.warn(`[UX-Engine] Could not connect to CDP port ${cdpPort}: ${e.message}. Falling back to launching persistent Chrome...`);
+    }
   }
 
-  // Use launchPersistentContext to remember all logins and cookies across runs
-  const context = await chromium.launchPersistentContext(profileDir, contextOptions);
+  if (!isCdpConnected) {
+    const realChrome = getRealChromePath();
+    console.log(`[UX-Engine] Launching Persistent Chrome Context...`);
+    console.log(`[UX-Engine] Profile Directory: ${profileDir}`);
+    console.log(`[UX-Engine] Visible Window: ${!isHeadless}, Real Chrome Binary: ${Boolean(realChrome)}`);
+
+    // Stealth launch arguments: strips automation signals
+    const launchArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--disable-features=IsolateOrigins,site-per-process',
+      `--window-size=${vpWidth},${vpHeight}`
+    ];
+
+    const contextOptions = {
+      headless: isHeadless,
+      args: launchArgs,
+      ignoreDefaultArgs: ['--enable-automation'],
+      viewport: { width: vpWidth, height: vpHeight },
+      deviceScaleFactor: 2,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      locale: 'zh-CN',
+      timezoneId: 'Asia/Shanghai'
+    };
+
+    if (realChrome) {
+      contextOptions.executablePath = realChrome;
+    }
+    if (proxyConfig) {
+      contextOptions.proxy = { server: proxyConfig };
+    }
+
+    // Use launchPersistentContext to remember all logins and cookies across runs
+    context = await chromium.launchPersistentContext(profileDir, contextOptions);
+  }
 
   // Stealth injection
   if (stealthEnabled) {
@@ -373,7 +394,11 @@ async function runUXAudit() {
     const reportPath = path.join(outputDir, 'ux-report-data.json');
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
     console.log(`[UX-Engine] Audit data written to ${reportPath}`);
-    await context.close();
+    if (isCdpConnected && browserOrContext) {
+      await browserOrContext.disconnect();
+    } else if (context) {
+      await context.close();
+    }
   }
 
   return report;
