@@ -1,11 +1,12 @@
 /**
- * UX Engine - Universal Vision, Anti-Bot Stealth & Chaos Simulator for Web Applications
+ * UX Engine - Universal Vision, Anti-Bot Stealth, Persistent Auth & Chaos Simulator
  * Features:
- * 1. Anti-Bot / Anti-Detection Stealth (Bypasses Cloudflare, navigator.webdriver, automation flags)
- * 2. Uses Real Installed Chrome when available
- * 3. Auto-detects local proxy (e.g. 127.0.0.1:12450)
- * 4. Captures High-res retina screenshots & Console/Network errors
- * 5. Built-in Chaos Monkey (Gremlins-style rapid clicker/scroller/typer)
+ * 1. Persistent Profile: Remembers your login, Cookies & localStorage permanently
+ * 2. Anti-Bot / Anti-Detection Stealth (Bypasses Cloudflare, navigator.webdriver, automation flags)
+ * 3. Uses Real Installed Chrome when available
+ * 4. Auto-detects local proxy (e.g. 127.0.0.1:12450)
+ * 5. Captures High-res retina screenshots & Console/Network errors
+ * 6. Built-in Chaos Monkey (Gremlins-style rapid clicker/scroller/typer)
  */
 
 const fs = require('fs');
@@ -44,6 +45,7 @@ async function checkProxyAvailable(host, port) {
     socket.connect(port, host);
   });
 }
+
 let playwright;
 try {
   playwright = require('playwright');
@@ -72,7 +74,7 @@ function getArg(key, defaultValue) {
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-UX-Engine: Stealth Vision & Chaos Testing CLI
+UX-Engine: Stealth Vision, Persistent Auth & Chaos Testing CLI
 Usage:
   node ux-engine.js [options]
 
@@ -80,9 +82,10 @@ Options:
   --url=<url>            Target URL to test (default: http://localhost:3000)
   --mode=<mode>          inspect | chaos | full (default: full)
   --duration=<seconds>   Chaos monkey duration in seconds (default: 8)
-  --headless=<bool>      Run headless or open window (default: true)
+  --headless=<bool>      Run headless or open window (default: false)
+  --profileDir=<path>    Directory for persistent user profile/cookies
   --proxy=<proxy_url>    Optional proxy server (auto-detects 127.0.0.1:12450 if available)
-  --stealth=<bool>       Enable anti-bot fingerpint evasion (default: true)
+  --stealth=<bool>       Enable anti-bot fingerprint evasion (default: true)
   --viewport=<WxH>       Viewport dimensions (default: 1440x900)
   --outputDir=<path>     Directory to save screenshots & json report
 `);
@@ -92,9 +95,11 @@ Options:
 const targetUrl = getArg('url', 'http://localhost:3000');
 const mode = getArg('mode', 'full'); // inspect | chaos | full
 const durationSec = parseInt(getArg('duration', '8'), 10);
-// Default to headed mode (headless: false) so user can visually see Chrome opening and interacting
+// Default to headed mode (headless: false) so user can see Chrome and log in if needed
 const isHeadless = getArg('headless', 'false') === 'true';
 const outputDir = path.resolve(getArg('outputDir', path.join(process.cwd(), '.ux-reports', `run-${Date.now()}`)));
+const defaultProfileDir = path.resolve('C:\\Users\\Administrator\\.gemini\\config\\skills\\simulate-ux\\.chrome-profile');
+const profileDir = path.resolve(getArg('profileDir', defaultProfileDir));
 const [vpWidth, vpHeight] = (getArg('viewport', '1440x900')).split('x').map(n => parseInt(n, 10));
 const stealthEnabled = getArg('stealth', 'true') !== 'false';
 let proxyConfig = getArg('proxy', null);
@@ -102,7 +107,9 @@ let proxyConfig = getArg('proxy', null);
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
-
+if (!fs.existsSync(profileDir)) {
+  fs.mkdirSync(profileDir, { recursive: true });
+}
 
 async function runUXAudit() {
   const report = {
@@ -136,7 +143,9 @@ async function runUXAudit() {
   }
 
   const realChrome = getRealChromePath();
-  console.log(`[UX-Engine] Launching browser... (Headless: ${isHeadless}, Real Chrome: ${Boolean(realChrome)})`);
+  console.log(`[UX-Engine] Launching Persistent Chrome Context...`);
+  console.log(`[UX-Engine] Profile Directory: ${profileDir}`);
+  console.log(`[UX-Engine] Visible Window: ${!isHeadless}, Real Chrome Binary: ${Boolean(realChrome)}`);
 
   // Stealth launch arguments: strips automation signals
   const launchArgs = [
@@ -145,54 +154,36 @@ async function runUXAudit() {
     '--disable-blink-features=AutomationControlled',
     '--disable-infobars',
     '--disable-features=IsolateOrigins,site-per-process',
-    '--window-size=' + vpWidth + ',' + vpHeight
+    `--window-size=${vpWidth},${vpHeight}`
   ];
 
-  const launchOptions = {
+  const contextOptions = {
     headless: isHeadless,
     args: launchArgs,
-    ignoreDefaultArgs: ['--enable-automation'] // CRITICAL: remove the automation banner flag
-  };
-
-  if (realChrome) {
-    launchOptions.executablePath = realChrome;
-  }
-
-  if (proxyConfig) {
-    launchOptions.proxy = { server: proxyConfig };
-  }
-
-  const browser = await chromium.launch(launchOptions);
-
-  const context = await browser.newContext({
+    ignoreDefaultArgs: ['--enable-automation'],
     viewport: { width: vpWidth, height: vpHeight },
     deviceScaleFactor: 2,
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai'
-  });
+  };
 
-  // Inject Stealth scripts to erase navigator.webdriver and match real human browser environment
+  if (realChrome) {
+    contextOptions.executablePath = realChrome;
+  }
+  if (proxyConfig) {
+    contextOptions.proxy = { server: proxyConfig };
+  }
+
+  // Use launchPersistentContext to remember all logins and cookies across runs
+  const context = await chromium.launchPersistentContext(profileDir, contextOptions);
+
+  // Stealth injection
   if (stealthEnabled) {
     await context.addInitScript(() => {
-      // 1. Wipe navigator.webdriver
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined
-      });
-
-      // 2. Mock chrome object
-      window.chrome = {
-        app: { isInstalled: false },
-        runtime: {},
-        loadTimes: function() {},
-        csi: function() {}
-      };
-
-      // 3. Mock languages and plugins
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['zh-CN', 'zh', 'en-US', 'en']
-      });
-
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      window.chrome = { app: { isInstalled: false }, runtime: {}, loadTimes: function() {}, csi: function() {} };
+      Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US', 'en'] });
       Object.defineProperty(navigator, 'plugins', {
         get: () => [
           { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
@@ -200,20 +191,16 @@ async function runUXAudit() {
           { name: 'Native Client', filename: 'internal-nacl-plugin' }
         ]
       });
-
-      // 4. Overwrite permissions query
-      const originalQuery = window.navigator.permissions?.query;
-      if (originalQuery) {
-        window.navigator.permissions.query = (parameters) => (
-          parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-        );
-      }
     });
   }
 
-  const page = await context.newPage();
+  let page;
+  const pages = context.pages();
+  if (pages.length > 0) {
+    page = pages[0];
+  } else {
+    page = await context.newPage();
+  }
 
   // Attach error monitors
   page.on('console', msg => {
@@ -240,9 +227,47 @@ async function runUXAudit() {
   try {
     console.log(`[UX-Engine] Navigating to ${targetUrl}...`);
     const t0 = Date.now();
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-    await page.waitForTimeout(2000);
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(2500);
     report.performanceTiming.domContentLoadedMs = Date.now() - t0;
+
+    // Check if login/auth modal is blocking
+    const isLoginNeeded = await page.evaluate(() => {
+      const text = document.body ? document.body.innerText : '';
+      const hasLoginText = text.includes('登录') || text.includes('Sign in') || text.includes('Log in') || text.includes('注册');
+      const hasModal = Boolean(document.querySelector('.modal, [role="dialog"], .login-modal, [class*="login"], [class*="auth"]'));
+      return hasLoginText && hasModal;
+    });
+
+    if (isLoginNeeded) {
+      console.log('\n======================================================');
+      console.log('🔑 [AUTH NOTICE] 检测到目标页面弹出登录/认证模态窗！');
+      console.log('📌 谷歌浏览器窗口现已展示在您的屏幕上。');
+      console.log('👉 请直接在弹出的真实浏览器中完成登录（扫码/账号密码）。');
+      console.log('💡 本引擎使用持久化 Profile，只要您登录一次，以后将永久免登录！');
+      console.log('⏳ 正在等待您完成登录进入画布（最长等待 120 秒）...');
+      console.log('======================================================\n');
+
+      // Wait up to 120 seconds for user to log in
+      const loginWaitStart = Date.now();
+      let loggedIn = false;
+      while (Date.now() - loginWaitStart < 120000) {
+        await page.waitForTimeout(2000);
+        // Check if modal disappeared or canvas loaded
+        const modalStillThere = await page.evaluate(() => {
+          return Boolean(document.querySelector('.modal, [role="dialog"], .login-modal, [class*="login-dialog"]'));
+        });
+        if (!modalStillThere) {
+          console.log('[UX-Engine] ✅ 检测到登录成功！继续执行走查...');
+          loggedIn = true;
+          await page.waitForTimeout(2000);
+          break;
+        }
+      }
+      if (!loggedIn) {
+        console.warn('[UX-Engine] ⚠️ 登录等待超时，尝试继续当前状态截图与走查。');
+      }
+    }
 
     // 1. Initial Visual Inspection (First Impression)
     console.log(`[UX-Engine] Capturing initial baseline screenshot...`);
@@ -259,9 +284,9 @@ async function runUXAudit() {
       await page.waitForTimeout(500);
 
       // Smooth scroll test
-      await page.evaluate(() => window.scrollBy({ top: 350, behavior: 'smooth' }));
-      await page.waitForTimeout(800);
-      await page.evaluate(() => window.scrollBy({ top: -350, behavior: 'smooth' }));
+      await page.evaluate(() => window.scrollBy({ top: 300, behavior: 'smooth' }));
+      await page.waitForTimeout(600);
+      await page.evaluate(() => window.scrollBy({ top: -300, behavior: 'smooth' }));
       await page.waitForTimeout(500);
 
       const interactiveShot = path.join(outputDir, '02_after_navigation.png');
@@ -348,7 +373,7 @@ async function runUXAudit() {
     const reportPath = path.join(outputDir, 'ux-report-data.json');
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
     console.log(`[UX-Engine] Audit data written to ${reportPath}`);
-    await browser.close();
+    await context.close();
   }
 
   return report;
