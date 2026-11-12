@@ -10,9 +10,40 @@
 
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
+const net = require('net');
 
-// Safe module resolver for Playwright
+// Check local real Chrome installation
+function getRealChromePath() {
+  const chromePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+  ];
+  for (const p of chromePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
+// Check if a proxy port is open
+async function checkProxyAvailable(host, port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.on('error', () => {
+      resolve(false);
+    });
+    socket.connect(port, host);
+  });
+}
 let playwright;
 try {
   playwright = require('playwright');
@@ -71,30 +102,6 @@ if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
-// Check local real Chrome installation
-function getRealChromePath() {
-  const chromePaths = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
-  ];
-  for (const p of chromePaths) {
-    if (fs.existsSync(p)) return p;
-  }
-  return undefined;
-}
-
-// Check if a proxy is available
-async function checkProxyAvailable(host, port) {
-  return new Promise((resolve) => {
-    const req = http.request({ host, port, method: 'CONNECT', path: 'www.google.com:443', timeout: 800 }, (res) => {
-      resolve(true);
-    });
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => { req.destroy(); resolve(false); });
-    req.end();
-  });
-}
 
 async function runUXAudit() {
   const report = {
