@@ -3,8 +3,8 @@
 ## 1. 走查元数据与基本信息
 - **走查目标 / URL**：`{{TARGET_URL}}`
 - **走查日期与时间**：`{{TIMESTAMP}}`
-- **体验模式**：`{{MODE}}` (Visual / Journey / Chaos / Full)
-- **走查执行引擎**：Playwright + Native Chaos Runner + AI Vision
+- **体验模式**：`{{MODE}}` (Baseline 日常温和 / Inspect 视觉巡检 / Chaos 混沌压力 / Full 全量)
+- **走查执行引擎**：Playwright Persistent Stealth + Native Everyday UX Auditor + Chaos Monkey
 - **视口配置**：`{{VIEWPORT}}` (例如 1440x900 @2x Retina)
 
 ---
@@ -20,23 +20,48 @@
 
 ---
 
-## 3. 视觉与排版缺陷审查 (Visual & Affordance)
+## 3. 日常基础用户体验与细腻度走查 (Everyday Baseline UX)
+> **关注普通人在日常使用中的舒适度、微交互触感与心智模型契合度**
+
+### 3.1 光标与可点击感知 (Cursor Affordance)
+- [ ] 可点击元素是否具备明显的 `cursor: pointer`（还是像普通纯文本一样粗糙）
+- [ ] 禁用（Disabled）状态是否具备明确的 `cursor: not-allowed`
+- **扫描结果摘要**：发现 `{{CURSOR_ISSUE_COUNT}}` 处光标引导缺陷。
+
+### 3.2 悬停微交互与过渡平滑度 (Hover State & Polish)
+- [ ] 鼠标悬停卡片/按钮时是否有 `0.15s~0.2s` 平滑色彩/阴影过渡，还是生硬瞬间换色？
+- [ ] 点击按下时是否有微下沉（`scale(0.98)`）或深色按压踏实感？
+
+### 3.3 全键盘漫游与焦点环指示 (Keyboard Focus Flow)
+- [ ] 按 `Tab` 键轮转时，当前聚焦组件是否有清晰可见的高亮焦点轮廓（Focus Ring）？
+- [ ] 弹窗展开时，焦点是否被妥善管理，按 `ESC` 键是否能自然退回？
+
+### 3.4 隐形文本溢出与排版毛刺 (Hidden Overflow Sniffer)
+- [ ] 标题或卡片在小字号/特殊宽度下是否被生硬截断？
+- **扫描结果摘要**：发现 `{{OVERFLOW_ISSUE_COUNT}}` 处文字溢出或截断排版瑕疵。
+
+### 3.5 空状态与冷启动引导温度 (Empty State Warmth)
+- [ ] 无数据时是冷冰冰的深灰空白，还是有精心设计的**空状态插画 + 明确的主行动引导**？
+- **评估结论**：`{{EMPTY_STATE_CONCLUSION}}`
+
+---
+
+## 4. 视觉与排版缺陷审查 (Visual & Layout)
 > 附走查过程截图引用与具体坐标/视觉定位
 
-### 3.1 首屏第一印象 (First Impression)
+### 4.1 首屏第一印象 (First Impression)
 - **视觉焦点分析**：
 - **主要行动点 (CTA) 识别难度**：
 - **信息噪音与干扰**：
 
-### 3.2 细节瑕疵走查 (UI Polishing)
+### 4.2 细节瑕疵走查 (UI Polishing)
 - [ ] 文本截断与换行问题
 - [ ] 对比度与可读性问题（深灰底/浅灰字）
-- [ ] 弹窗遮罩冒泡与穿透问题
-- [ ] 响应式折叠变形
+- [ ] 弹窗遮罩滚轮穿透隔离检查
 
 ---
 
-## 4. 极限与混沌测试 (Chaos Testing Results)
+## 5. 极限与混沌测试 (Chaos Testing Results)
 - **测试持续时间**：`{{CHAOS_DURATION}}` 秒
 - **高频随机点击触发数**：`{{CHAOS_CLICKS}}` 次
 - **随机滚动与输入操作**：`{{CHAOS_INPUTS_SCROLLS}}` 次
@@ -46,23 +71,23 @@
 
 ---
 
-## 5. 发现的问题清单与严重度评级 (Issue Backlog)
+## 6. 发现的问题清单与严重度评级 (Issue Backlog)
 
 ### 🔴 P0 - 阻断级 (Blocker)
-- *例如：狂点下页面白屏无响应、数据提交丢失、未捕获 JS 导致整个画布挂死。*
+- *例如：狂点下页面白屏无响应、数据提交丢失、未捕获 JS 导致整个应用挂死。*
 
 ### 🟡 P1 - 体验严重受损 (Major)
 - *例如：按钮没有防抖导致重复提交、连续点击时抽屉与弹窗层级错乱、撤销重做坐标跳变。*
 
-### 🔵 P2 - 视觉与认知摩擦 (Minor)
-- *例如：图标未配 Tooltip 说明、深色模式下某些分割线过于刺眼、鼠标悬停无 cursor: pointer。*
+### 🔵 P2 - 日常细节与手感瑕疵 (Baseline Friction)
+- *例如：按钮可点击但缺少 cursor: pointer、悬停生硬无 transition、深灰文字对比度不足。*
 
 ### ⚪ P3 - 润色建议 (Suggestion)
-- *例如：加载时补充骨架屏动效、优化输入框占位文案。*
+- *例如：空白态补充引导图文、优化输入框占位文案、微动效调优。*
 
 ---
 
-## 6. 代码级可落地优化建议 (Actionable Recommendations)
-1. **[防抖/并发拦截]**：
-2. **[视觉层级调整]**：
-3. **[事件冒泡隔离]**：
+## 7. 代码级可落地优化建议 (Actionable Recommendations)
+1. **[交互手感与光标修复]**：
+2. **[视觉层级与微动效调整]**：
+3. **[防抖与事件隔离]**：

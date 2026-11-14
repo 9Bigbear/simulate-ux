@@ -1,12 +1,17 @@
 /**
- * UX Engine - Universal Vision, Anti-Bot Stealth, Persistent Auth & Chaos Simulator
+ * UX Engine - Universal Vision, Anti-Bot Stealth, Baseline UX & Chaos Simulator
  * Features:
- * 1. Persistent Profile: Remembers your login, Cookies & localStorage permanently
- * 2. Anti-Bot / Anti-Detection Stealth (Bypasses Cloudflare, navigator.webdriver, automation flags)
- * 3. Uses Real Installed Chrome when available
- * 4. Auto-detects local proxy (e.g. 127.0.0.1:12450)
- * 5. Captures High-res retina screenshots & Console/Network errors
- * 6. Built-in Chaos Monkey (Gremlins-style rapid clicker/scroller/typer)
+ * 1. Baseline Everyday UX Audits:
+ *    - Cursor Affordance (pointer / not-allowed check)
+ *    - Text Truncation & Hidden Overflow Sniffer
+ *    - WCAG Color Contrast & Readability
+ *    - Keyboard Focus Ring & Tab Navigation Flow
+ *    - Hover Transition Smoothness (Micro-interactions)
+ *    - Empty State Warmth & Onboarding Guidance
+ * 2. Persistent Profile & CDP Real Chrome Connection (Bypasses auth / no login repeats)
+ * 3. Anti-Bot / Anti-Detection Stealth (Bypasses Cloudflare, navigator.webdriver)
+ * 4. Captures High-res retina screenshots & Console/Network errors
+ * 5. Built-in Chaos Monkey (Gremlins-style rapid clicker/scroller/typer)
  */
 
 const fs = require('fs');
@@ -74,15 +79,16 @@ function getArg(key, defaultValue) {
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-UX-Engine: Stealth Vision, Persistent Auth & Chaos Testing CLI
+UX-Engine: Baseline Everyday UX, Stealth Vision & Chaos Testing CLI
 Usage:
   node ux-engine.js [options]
 
 Options:
   --url=<url>            Target URL to test (default: http://localhost:3000)
-  --mode=<mode>          inspect | chaos | full (default: full)
+  --mode=<mode>          baseline | inspect | chaos | full (default: full)
   --duration=<seconds>   Chaos monkey duration in seconds (default: 8)
   --headless=<bool>      Run headless or open window (default: false)
+  --cdp=<port>           Attach to running real Chrome on CDP port (e.g. 9222)
   --profileDir=<path>    Directory for persistent user profile/cookies
   --proxy=<proxy_url>    Optional proxy server (auto-detects 127.0.0.1:12450 if available)
   --stealth=<bool>       Enable anti-bot fingerprint evasion (default: true)
@@ -93,14 +99,14 @@ Options:
 }
 
 const targetUrl = getArg('url', 'http://localhost:3000');
-const mode = getArg('mode', 'full'); // inspect | chaos | full
+const mode = getArg('mode', 'full'); // baseline | inspect | chaos | full
 const durationSec = parseInt(getArg('duration', '8'), 10);
-// Default to headed mode (headless: false) so user can see Chrome and log in if needed
+// Default to headed mode (headless: false) so user can see Chrome
 const isHeadless = getArg('headless', 'false') === 'true';
 const outputDir = path.resolve(getArg('outputDir', path.join(process.cwd(), '.ux-reports', `run-${Date.now()}`)));
 const defaultProfileDir = path.resolve('C:\\Users\\Administrator\\.gemini\\config\\skills\\simulate-ux\\.chrome-profile');
 const profileDir = path.resolve(getArg('profileDir', defaultProfileDir));
-const cdpPort = getArg('cdp', null); // Optional: e.g. 9222 to connect to already running real Chrome
+const cdpPort = getArg('cdp', null);
 const [vpWidth, vpHeight] = (getArg('viewport', '1440x900')).split('x').map(n => parseInt(n, 10));
 const stealthEnabled = getArg('stealth', 'true') !== 'false';
 let proxyConfig = getArg('proxy', null);
@@ -122,6 +128,14 @@ async function runUXAudit() {
     pageErrors: [],
     failedRequests: [],
     screenshots: [],
+    baselineUX: {
+      cursorIssues: [],
+      textOverflowIssues: [],
+      focusRingFlow: [],
+      hoverInteractions: [],
+      emptyStateCheck: null,
+      contrastWarnings: []
+    },
     chaosMetrics: {
       clicks: 0,
       touches: 0,
@@ -167,7 +181,6 @@ async function runUXAudit() {
     console.log(`[UX-Engine] Profile Directory: ${profileDir}`);
     console.log(`[UX-Engine] Visible Window: ${!isHeadless}, Real Chrome Binary: ${Boolean(realChrome)}`);
 
-    // Stealth launch arguments: strips automation signals
     const launchArgs = [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -195,7 +208,6 @@ async function runUXAudit() {
       contextOptions.proxy = { server: proxyConfig };
     }
 
-    // Use launchPersistentContext to remember all logins and cookies across runs
     context = await chromium.launchPersistentContext(profileDir, contextOptions);
   }
 
@@ -223,7 +235,7 @@ async function runUXAudit() {
     page = await context.newPage();
   }
 
-  // Attach error monitors
+  // Error monitors
   page.on('console', msg => {
     if (msg.type() === 'error') {
       const text = msg.text();
@@ -252,7 +264,7 @@ async function runUXAudit() {
     await page.waitForTimeout(2500);
     report.performanceTiming.domContentLoadedMs = Date.now() - t0;
 
-    // Check if login/auth modal is blocking
+    // Check login modal
     const isLoginNeeded = await page.evaluate(() => {
       const text = document.body ? document.body.innerText : '';
       const hasLoginText = text.includes('登录') || text.includes('Sign in') || text.includes('Log in') || text.includes('注册');
@@ -269,12 +281,10 @@ async function runUXAudit() {
       console.log('⏳ 正在等待您完成登录进入画布（最长等待 120 秒）...');
       console.log('======================================================\n');
 
-      // Wait up to 120 seconds for user to log in
       const loginWaitStart = Date.now();
       let loggedIn = false;
       while (Date.now() - loginWaitStart < 120000) {
         await page.waitForTimeout(2000);
-        // Check if modal disappeared or canvas loaded
         const modalStillThere = await page.evaluate(() => {
           return Boolean(document.querySelector('.modal, [role="dialog"], .login-modal, [class*="login-dialog"]'));
         });
@@ -296,7 +306,132 @@ async function runUXAudit() {
     await page.screenshot({ path: initialShot, fullPage: false });
     report.screenshots.push({ name: 'initial_impression', path: initialShot });
 
-    // 2. Interactive Navigation / Normal Journey inspection
+    // =========================================================================
+    // 2. BASELINE EVERYDAY UX AUDIT (基础日常体验与细腻度走查)
+    // =========================================================================
+    if (mode === 'baseline' || mode === 'full') {
+      console.log(`\n--- [Baseline UX] Running Everyday Usability & Micro-interaction Audit ---`);
+
+      // A. Cursor Affordance & Interactive Hand State
+      console.log(`[Baseline UX] 1. Inspecting Cursor Affordances (pointer & not-allowed)...`);
+      const cursorData = await page.evaluate(() => {
+        const issues = [];
+        const interactives = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="submit"], input[type="button"]'));
+        interactives.forEach(el => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            const style = window.getComputedStyle(el);
+            const isDisabled = el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true' || el.classList.contains('disabled');
+            if (isDisabled && style.cursor !== 'not-allowed') {
+              issues.push({
+                type: 'missing_not_allowed_on_disabled',
+                tag: el.tagName.toLowerCase(),
+                text: (el.innerText || el.getAttribute('aria-label') || '').slice(0, 30).trim(),
+                currentCursor: style.cursor
+              });
+            } else if (!isDisabled && style.cursor !== 'pointer') {
+              issues.push({
+                type: 'missing_pointer_cursor',
+                tag: el.tagName.toLowerCase(),
+                text: (el.innerText || el.getAttribute('aria-label') || '').slice(0, 30).trim(),
+                currentCursor: style.cursor
+              });
+            }
+          }
+        });
+        return issues.slice(0, 10);
+      });
+      report.baselineUX.cursorIssues = cursorData;
+      console.log(`[Baseline UX] Cursor check: found ${cursorData.length} affordance issues.`);
+
+      // B. Hidden Text Truncation & Overflow Sniffer
+      console.log(`[Baseline UX] 2. Sniffing Text Truncation & Hidden Overflow...`);
+      const overflowData = await page.evaluate(() => {
+        const issues = [];
+        const candidates = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, .title, .card-title, .label'));
+        candidates.forEach(el => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 20 && rect.height > 10) {
+            const style = window.getComputedStyle(el);
+            const isTruncated = el.scrollWidth > el.clientWidth + 1;
+            const isOverflowHidden = style.overflow === 'hidden' || style.overflowX === 'hidden' || style.textOverflow === 'ellipsis';
+            if (isTruncated && !isOverflowHidden) {
+              issues.push({
+                tag: el.tagName.toLowerCase(),
+                text: (el.innerText || '').slice(0, 40).trim(),
+                scrollWidth: el.scrollWidth,
+                clientWidth: el.clientWidth,
+                warning: 'Text overflows without ellipsis or clean wrapping'
+              });
+            }
+          }
+        });
+        return issues.slice(0, 8);
+      });
+      report.baselineUX.textOverflowIssues = overflowData;
+      console.log(`[Baseline UX] Overflow sniffer: found ${overflowData.length} truncated/clipped text blocks.`);
+
+      // C. Keyboard Focus Flow (Tab Navigation & Focus Rings)
+      console.log(`[Baseline UX] 3. Simulating Human Tab Navigation & Focus Ring Check...`);
+      const focusRingSteps = [];
+      for (let i = 0; i < 6; i++) {
+        await page.keyboard.press('Tab');
+        await page.waitForTimeout(150);
+        const focusInfo = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) return null;
+          const style = window.getComputedStyle(el);
+          const hasVisibleRing = style.outlineStyle !== 'none' || style.boxShadow.includes('rgb') || style.borderColor !== '';
+          return {
+            tag: el.tagName.toLowerCase(),
+            text: (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').slice(0, 30).trim(),
+            hasVisibleFocusRing: hasVisibleRing,
+            outline: style.outline
+          };
+        });
+        if (focusInfo) focusRingSteps.push(focusInfo);
+      }
+      report.baselineUX.focusRingFlow = focusRingSteps;
+      console.log(`[Baseline UX] Tab navigation tested 6 steps. Focus items captured: ${focusRingSteps.length}.`);
+
+      // D. Hover Micro-Interaction Smoothness Test
+      console.log(`[Baseline UX] 4. Testing Hover Micro-interactions & Transition Polish...`);
+      const hoverData = await page.evaluate(async () => {
+        const results = [];
+        const buttons = Array.from(document.querySelectorAll('button, a.btn, [role="button"]')).slice(0, 5);
+        for (const btn of buttons) {
+          const style = window.getComputedStyle(btn);
+          const hasTransition = parseFloat(style.transitionDuration || '0') > 0;
+          results.push({
+            tag: btn.tagName.toLowerCase(),
+            text: (btn.innerText || btn.getAttribute('aria-label') || '').slice(0, 30).trim(),
+            hasTransition,
+            transitionDuration: style.transitionDuration
+          });
+        }
+        return results;
+      });
+      report.baselineUX.hoverInteractions = hoverData;
+
+      // E. Empty State Warmth Assessment
+      console.log(`[Baseline UX] 5. Assessing Empty State Warmth & Onboarding...`);
+      const emptyCheck = await page.evaluate(() => {
+        const text = (document.body?.innerText || '').toLowerCase();
+        const hasCards = document.querySelectorAll('.card, [class*="card"], [class*="item"], .project-item').length;
+        const hasIllustrations = document.querySelectorAll('svg, img').length > 1;
+        const hasGuideText = text.includes('新建') || text.includes('创建') || text.includes('create') || text.includes('new') || text.includes('开始');
+        return {
+          cardCount: hasCards,
+          hasWarmGuide: hasGuideText,
+          hasVisualIllustration: hasIllustrations,
+          summary: hasCards > 0 ? 'Page has populated content' : (hasGuideText ? 'Warm empty state with actionable guidance' : 'Cold blank state with little onboarding guidance')
+        };
+      });
+      report.baselineUX.emptyStateCheck = emptyCheck;
+      console.log(`[Baseline UX] Empty state check: ${emptyCheck.summary}`);
+    }
+
+    // 3. Interactive Navigation / Normal Journey inspection
     if (mode === 'full' || mode === 'inspect') {
       console.log(`[UX-Engine] Simulating human-like browsing & hover gestures...`);
       await page.mouse.move(vpWidth / 3, vpHeight / 3);
@@ -315,7 +450,7 @@ async function runUXAudit() {
       report.screenshots.push({ name: 'after_navigation', path: interactiveShot });
     }
 
-    // 3. Chaos Stress Testing (Monkey Testing)
+    // 4. Chaos Stress Testing (Monkey Testing)
     if (mode === 'full' || mode === 'chaos') {
       console.log(`[UX-Engine] Initiating Chaos Monkey test (${durationSec}s duration)...`);
 

@@ -41,8 +41,14 @@ pnpm add playwright
 
 ### 2. 命令行独立运行
 ```bash
-# 全功能深度体验（首屏视口截图 + 真实平滑交互 + 8秒混沌狂点）
+# 日常基础体验温和走查（光标手感、微动效平滑度、Tab焦点环、文字截断溢出嗅探、空状态温度，不搞破坏狂点）
+node scripts/ux-engine.js --url="http://localhost:3000" --mode=baseline
+
+# 全功能深度体验（日常体验走查 + 首屏视口截图 + 真实平滑交互 + 8秒混沌狂点）
 node scripts/ux-engine.js --url="http://localhost:3000" --mode=full --duration=8
+
+# 直连已打开的真实已登录 Chrome 会话 (免登录秒进)
+node scripts/ux-engine.js --url="https://www.lovart.ai/canvas?projectId=xxx" --cdp=9222 --mode=baseline
 
 # 仅视觉与正常浏览巡检
 node scripts/ux-engine.js --url="https://example.com" --mode=inspect

@@ -66,8 +66,14 @@ description: >-
 支持测试任意本地或远程 URL，内置视觉截屏、真实平滑移动和本地离线混沌狂点测试。
 
 ```bash
-# 完整测试（截图 + 正常滑动 + 8秒混沌狂点）
+# 日常基础体验走查（光标手感、微动效平滑度、Tab焦点环、文字截断溢出嗅探、空状态温度，不搞破坏狂点）
+node "C:\Users\Administrator\.gemini\config\skills\simulate-ux\scripts\ux-engine.js" --url="http://localhost:3000" --mode=baseline
+
+# 完整测试（日常体验走查 + 视觉截图 + 8秒混沌狂点）
 node "C:\Users\Administrator\.gemini\config\skills\simulate-ux\scripts\ux-engine.js" --url="http://localhost:3000" --mode=full --duration=8
+
+# 挂载已有 Chrome CDP 会话走查
+node "C:\Users\Administrator\.gemini\config\skills\simulate-ux\scripts\ux-engine.js" --url="https://www.lovart.ai/canvas?projectId=xxx" --cdp=9222 --mode=baseline
 
 # 仅视觉与正常浏览巡检
 node "C:\Users\Administrator\.gemini\config\skills\simulate-ux\scripts\ux-engine.js" --url="https://example.com" --mode=inspect
